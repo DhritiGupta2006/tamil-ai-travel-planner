@@ -1,0 +1,3 @@
+# This directory stores the SQLite database file (travel.db).
+# The database file is created automatically when the backend starts for the first time.
+# The actual .db file is excluded from version control via .gitignore.
