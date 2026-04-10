@@ -22,7 +22,7 @@ const NLP_SERVICE_URL = process.env.NLP_SERVICE_URL || 'http://localhost:5000';
 app.use(cors());
 app.use(express.json());
 
-// Rate limiting
+// Rate limiting — applied directly on individual routes below
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100,
@@ -30,9 +30,6 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later.' },
 });
-app.use('/query', apiLimiter);
-app.use('/voice', apiLimiter);
-app.use('/recent', apiLimiter);
 
 // Multer for audio file uploads (store in memory for Whisper API)
 const upload = multer({ storage: multer.memoryStorage() });
@@ -107,7 +104,7 @@ app.get('/health', (req, res) => {
 });
 
 // GET /recent — last 10 queries with their itineraries
-app.get('/recent', (req, res) => {
+app.get('/recent', apiLimiter, (req, res) => {
   try {
     const db = getDb();
     const rows = db.prepare(`
@@ -145,7 +142,7 @@ app.get('/recent', (req, res) => {
 });
 
 // POST /query — accepts text, runs NLP + itinerary generation
-app.post('/query', async (req, res) => {
+app.post('/query', apiLimiter, async (req, res) => {
   try {
     const { text } = req.body;
     if (!text || typeof text !== 'string' || text.trim() === '') {
@@ -161,7 +158,7 @@ app.post('/query', async (req, res) => {
 });
 
 // POST /voice — accepts audio file, transcribes with Whisper, then processes as /query
-app.post('/voice', upload.single('audio'), async (req, res) => {
+app.post('/voice', apiLimiter, upload.single('audio'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'audio file is required (multipart field: audio)' });
   }
