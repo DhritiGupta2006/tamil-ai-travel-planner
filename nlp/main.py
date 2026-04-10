@@ -32,7 +32,7 @@ INTENT_KEYWORDS = {
 TAMIL_PLACES = [
     "Chennai", "சென்னை",
     "Madurai", "மதுரை",
-    "Coimbatore", "கோயம்புத்தூர்",
+    "Coimbatore", "கோயம்புத்தூர்", "கோவை",
     "Trichy", "திருச்சி", "திருச்சிராப்பள்ளி",
     "Salem", "சேலம்",
     "Ooty", "ஊட்டி",
@@ -64,9 +64,9 @@ SOURCE_PATTERNS = [
 # Tamil word order: "CITY க்கு" — city comes BEFORE the postposition
 # English word order: "to CITY" — city comes AFTER the preposition
 DEST_PATTERNS = [
-    r"([\w\u0B80-\u0BFF]+)\s+(?:க்கு|வரை)",       # Madurai க்கு
-    r"(?:to|towards)\s+([\w\u0B80-\u0BFF]+)",       # to Madurai
-    r"(?:செல்ல|போக)\s+([\w\u0B80-\u0BFF]+)",       # செல்ல Madurai
+    r"([\w\u0B80-\u0BFF]+)\s+(?:க்கு|வரை)",        # Madurai க்கு
+    r"(?:to|towards)\s+([\w\u0B80-\u0BFF]+)",        # to Madurai
+    r"([\w\u0B80-\u0BFF]+)\s+(?:செல்ல|போக)",        # கோவை செல்ல
 ]
 
 # Date patterns
@@ -139,12 +139,24 @@ def extract_entities(text: str) -> dict:
     # If pattern-based extraction failed, use known-places fallback
     if not source or not destination:
         known = _find_known_places(text)
-        if len(known) >= 2 and not source:
-            source = known[0]
-        if len(known) >= 2 and not destination:
-            destination = known[1]
-        elif len(known) == 1 and not destination:
-            destination = known[0]
+        if not source and not destination:
+            # No places from patterns — assign positionally; a single place defaults
+            # to destination (most queries are "go to CITY" with no stated origin)
+            if len(known) >= 2:
+                source = known[0]
+                destination = known[1]
+            elif len(known) == 1:
+                destination = known[0]
+        elif not source:
+            for place in known:
+                if place != destination:
+                    source = place
+                    break
+        elif not destination:
+            for place in known:
+                if place != source:
+                    destination = place
+                    break
 
     # Date
     date = ""
