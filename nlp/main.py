@@ -1,9 +1,10 @@
 """
 main.py — NLP logic for Tamil AI Travel Planner.
-Provides keyword-based intent detection and regex entity extraction.
+Provides keyword-based intent detection and positional entity extraction.
 """
 
 import re
+import unicodedata
 
 # ─── Intent keywords ──────────────────────────────────────────────────────────
 
@@ -55,19 +56,14 @@ TAMIL_PLACES = [
 # Regex patterns for source city
 # Tamil word order: "CITY இருந்து" — city comes BEFORE the postposition
 # English word order: "from CITY" — city comes AFTER the preposition
-SOURCE_PATTERNS = [
-    r"([\w\u0B80-\u0BFF]+)\s+(?:இருந்து|லிருந்து|நகரிலிருந்து)",  # Chennai இருந்து
-    r"(?:from)\s+([\w\u0B80-\u0BFF]+)",                              # from Chennai
-]
+_SOURCE_MARKERS_TAMIL = ["இருந்து", "லிருந்து", "நகரிலிருந்து"]
+_SOURCE_MARKERS_NORM = [unicodedata.normalize("NFC", m) for m in _SOURCE_MARKERS_TAMIL]
 
 # Regex patterns for destination city
 # Tamil word order: "CITY க்கு" — city comes BEFORE the postposition
 # English word order: "to CITY" — city comes AFTER the preposition
-DEST_PATTERNS = [
-    r"([\w\u0B80-\u0BFF]+)\s+(?:க்கு|வரை)",        # Madurai க்கு
-    r"(?:to|towards)\s+([\w\u0B80-\u0BFF]+)",        # to Madurai
-    r"([\w\u0B80-\u0BFF]+)\s+(?:செல்ல|போக)",        # கோவை செல்ல
-]
+_DEST_MARKERS_TAMIL = ["க்கு", "செல்ல", "போக", "வரை"]
+_DEST_MARKERS_NORM = [unicodedata.normalize("NFC", m) for m in _DEST_MARKERS_TAMIL]
 
 # Date patterns
 DATE_PATTERNS = [
@@ -102,6 +98,11 @@ def detect_intent(text: str) -> str:
     return best if scores[best] > 0 else "plan_trip"
 
 
+def _normalize(text: str) -> str:
+    """Normalize Unicode text to NFC form for consistent Tamil string matching."""
+    return unicodedata.normalize("NFC", text)
+
+
 def _find_place_in_text(text: str, patterns: list[str]) -> str:
     """
     Tries each pattern; returns the captured group only if it is a known place.
@@ -120,43 +121,100 @@ def _find_place_in_text(text: str, patterns: list[str]) -> str:
 
 
 def _find_known_places(text: str) -> list[str]:
-    """Returns all known Tamil places found in the text (preserving order)."""
-    found = []
-    text_lower = text.lower()
+    """Returns all known Tamil places found in the text, ordered by position in text."""
+    text_norm = _normalize(text.lower())
+    matches = []
+    seen: set[str] = set()
     for place in TAMIL_PLACES:
-        if place.lower() in text_lower and place not in found:
-            found.append(place)
-    return found
+        place_norm = _normalize(place.lower())
+        idx = text_norm.find(place_norm)
+        if idx != -1 and place not in seen:
+            matches.append((idx, place))
+            seen.add(place)
+    matches.sort(key=lambda x: x[0])
+    return [place for _, place in matches]
+
+
+def _find_source_by_marker(text: str, known_places: list[str]) -> str:
+    """
+    Find source city using positional markers.
+    Tamil pattern: "CITY இருந்து" — the known place that appears just before a
+    source marker is the source city.
+    English pattern: "from CITY".
+    """
+    text_norm = _normalize(text)
+    places_norm = [_normalize(p) for p in known_places]
+    for marker_norm in _SOURCE_MARKERS_NORM:
+        idx = text_norm.find(marker_norm)
+        if idx != -1:
+            before_marker = text_norm[:idx].rstrip()
+            for place, place_norm in zip(known_places, places_norm):
+                if before_marker.endswith(place_norm):
+                    return place
+    # English "from CITY"
+    m = re.search(r"(?:from)\s+(\S+)", text, re.IGNORECASE)
+    if m:
+        candidate = _normalize(m.group(1).strip().lower())
+        for place, place_norm in zip(known_places, places_norm):
+            if _normalize(place.lower()) == candidate:
+                return place
+    return ""
+
+
+def _find_dest_by_marker(text: str, known_places: list[str]) -> str:
+    """
+    Find destination city using positional markers.
+    Tamil pattern: "CITY செல்ல / CITY க்கு" — the known place that appears just
+    before a destination marker is the destination city.
+    English pattern: "to CITY" / "towards CITY".
+    """
+    text_norm = _normalize(text)
+    places_norm = [_normalize(p) for p in known_places]
+    for marker_norm in _DEST_MARKERS_NORM:
+        idx = text_norm.find(marker_norm)
+        if idx != -1:
+            before_marker = text_norm[:idx].rstrip()
+            for place, place_norm in zip(known_places, places_norm):
+                if before_marker.endswith(place_norm):
+                    return place
+    # English "to CITY" or "towards CITY"
+    m = re.search(r"(?:to|towards)\s+(\S+)", text, re.IGNORECASE)
+    if m:
+        candidate = _normalize(m.group(1).strip().lower())
+        for place, place_norm in zip(known_places, places_norm):
+            if _normalize(place.lower()) == candidate:
+                return place
+    return ""
 
 
 def extract_entities(text: str) -> dict:
     """
     Extracts source, destination, date, and budget from text.
+    Uses positional marker logic for Tamil and English postpositions/prepositions,
+    with a positional fallback when no markers are present.
     """
-    source = _find_place_in_text(text, SOURCE_PATTERNS)
-    destination = _find_place_in_text(text, DEST_PATTERNS)
+    known = _find_known_places(text)
 
-    # If pattern-based extraction failed, use known-places fallback
-    if not source or not destination:
-        known = _find_known_places(text)
-        if not source and not destination:
-            # No places from patterns — assign positionally; a single place defaults
-            # to destination (most queries are "go to CITY" with no stated origin)
-            if len(known) >= 2:
-                source = known[0]
-                destination = known[1]
-            elif len(known) == 1:
-                destination = known[0]
-        elif not source:
-            for place in known:
-                if place != destination:
-                    source = place
-                    break
-        elif not destination:
-            for place in known:
-                if place != source:
-                    destination = place
-                    break
+    source = _find_source_by_marker(text, known)
+    destination = _find_dest_by_marker(text, known)
+
+    # Fallback: positional assignment when markers didn't resolve both places
+    if not source and not destination:
+        if len(known) >= 2:
+            source = known[0]
+            destination = known[1]
+        elif len(known) == 1:
+            destination = known[0]
+    elif not source:
+        for place in known:
+            if place != destination:
+                source = place
+                break
+    elif not destination:
+        for place in known:
+            if place != source:
+                destination = place
+                break
 
     # Date
     date = ""
