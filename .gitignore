@@ -1,0 +1,38 @@
+# Node.js dependencies
+node_modules/
+
+# Next.js build output
+frontend/.next/
+frontend/out/
+
+# SQLite database file (auto-created at runtime)
+database/*.db
+database/*.db-shm
+database/*.db-wal
+
+# Environment files (keep .env.example, ignore actual .env)
+.env
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+nlp/__pycache__/
+nlp/*.pyc
+nlp/venv/
+nlp/.venv/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
