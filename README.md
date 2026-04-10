@@ -20,7 +20,7 @@ tamil-ai-travel-planner/
 | Layer     | Technology |
 |-----------|-----------|
 | Frontend  | Next.js 14, React 18, Browser MediaRecorder API, Web Speech API |
-| Backend   | Node.js, Express, better-sqlite3, multer, OpenAI Whisper API |
+| Backend   | Node.js, Express, better-sqlite3, multer |
 | NLP       | Python 3.10+, Flask 3, regex-based intent detection |
 | Database  | SQLite (via better-sqlite3) |
 
@@ -28,7 +28,7 @@ tamil-ai-travel-planner/
 
 ## Features
 
-- 🗣️ **Voice input** — record audio which is transcribed via OpenAI Whisper (whisper-1 model)
+- 🗣️ **Voice input** — record audio (voice transcription requires an optional OpenAI API key)
 - ⌨️ **Text input** — type queries in Tamil or English
 - 🤖 **Intent detection** — keyword-based NLP for Tamil travel vocabulary
 - 📍 **Entity extraction** — source city, destination city, travel date, budget
@@ -45,7 +45,6 @@ tamil-ai-travel-planner/
 
 - Node.js ≥ 18
 - Python ≥ 3.10
-- An OpenAI API key (for voice transcription via Whisper)
 
 ### 1. Clone the repository
 
@@ -68,8 +67,6 @@ python app.py
 
 ```bash
 cd backend
-cp .env.example .env
-# Edit .env and add your OPENAI_API_KEY
 npm install
 npm start
 ```
@@ -96,7 +93,7 @@ Open [http://localhost:3000](http://localhost:3000) in your browser.
 | GET    | /health   | Returns `{"status":"ok"}` |
 | GET    | /recent   | Returns last 10 queries + itineraries |
 | POST   | /query    | `{"text":"..."}` → NLP + itinerary generation |
-| POST   | /voice    | Multipart `audio` file → Whisper transcription → same as /query |
+| POST   | /voice    | Multipart `audio` file → returns 501 (voice transcription not available without OpenAI API key) |
 
 ### NLP Service (Flask — `http://localhost:5000`)
 
@@ -148,7 +145,6 @@ CREATE TABLE itineraries (
 
 | Variable          | Default                    | Description |
 |-------------------|----------------------------|-------------|
-| `OPENAI_API_KEY`  | —                          | Required for voice transcription |
 | `PORT`            | `3001`                     | Backend port |
 | `NLP_SERVICE_URL` | `http://localhost:5000`    | URL of the Flask NLP service |
 | `DB_PATH`         | `../database/travel.db`    | SQLite file path (relative to backend/) |

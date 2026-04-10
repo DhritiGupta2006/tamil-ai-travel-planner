@@ -2,12 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const fs = require('fs');
-const path = require('path');
-const crypto = require('crypto');
 const axios = require('axios');
-const FormData = require('form-data');
-const OpenAI = require('openai');
+
 const rateLimit = require('express-rate-limit');
 
 const { getDb } = require('./db');
@@ -31,11 +27,8 @@ const apiLimiter = rateLimit({
   message: { error: 'Too many requests, please try again later.' },
 });
 
-// Multer for audio file uploads (store in memory for Whisper API)
+// Multer for audio file uploads
 const upload = multer({ storage: multer.memoryStorage() });
-
-// OpenAI client
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 // ─── Helper: Call NLP service ────────────────────────────────────────────────
 async function callNlpService(text) {
@@ -157,46 +150,14 @@ app.post('/query', apiLimiter, async (req, res) => {
   }
 });
 
-// POST /voice — accepts audio file, transcribes with Whisper, then processes as /query
-app.post('/voice', apiLimiter, upload.single('audio'), async (req, res) => {
+// POST /voice — voice transcription requires an OpenAI API key (not configured)
+app.post('/voice', apiLimiter, upload.single('audio'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'audio file is required (multipart field: audio)' });
   }
-
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY is not configured' });
-  }
-
-  try {
-    // Write buffer to a temp file for OpenAI SDK.
-    // Use a random hex ID (not user-provided data) to avoid path injection.
-    const randomId = crypto.randomBytes(16).toString('hex');
-    const tmpPath = path.join('/tmp', `voice_${randomId}.webm`);
-    fs.writeFileSync(tmpPath, req.file.buffer);
-
-    let transcript;
-    try {
-      const transcription = await openai.audio.transcriptions.create({
-        file: fs.createReadStream(tmpPath),
-        model: 'whisper-1',
-        language: 'ta',
-      });
-      transcript = transcription.text;
-    } finally {
-      // Clean up temp file
-      try { fs.unlinkSync(tmpPath); } catch (_) {}
-    }
-
-    if (!transcript || transcript.trim() === '') {
-      return res.status(422).json({ error: 'Could not transcribe audio' });
-    }
-
-    const result = await processQuery(transcript.trim());
-    res.json(result);
-  } catch (err) {
-    console.error('POST /voice error:', err);
-    res.status(500).json({ error: 'Failed to process voice input' });
-  }
+  return res.status(501).json({
+    error: 'Voice transcription is not available. Please use the text /query endpoint instead.',
+  });
 });
 
 // ─── Utility ─────────────────────────────────────────────────────────────────
